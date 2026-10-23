@@ -21,7 +21,7 @@ It does not include any game, Plutonium or CrossOver files.
 - **Rosetta 2**: `softwareupdate --install-rosetta --agree-to-license`
 - **Xcode Command Line Tools**: `xcode-select --install`
 - **[Homebrew](https://brew.sh)**.
-- **[CrossOver](https://www.codeweavers.com/crossover) 26.3** (build 26.3.0.39832) installed in `/Applications`. Its runtime is used, so you need a valid CrossOver license.
+- **[CrossOver](https://www.codeweavers.com/crossover) 26.3** (build 26.3.0.39832) installed in `/Applications`. The installer copies its Wine runtime; you never need to open CrossOver itself. The free trial is enough to install it, and this setup was tested with the trial version. Using CrossOver after the trial is subject to CodeWeavers' license terms.
 - Your copy of **Black Ops II** (the `zone/`, `sound/`, `video/` … folders) with **`plutonium.exe`** in the same folder. Get `plutonium.exe` from [plutonium.pw](https://plutonium.pw).
 - About 10 GB of free space for the build.
 - For online play: a [Plutonium](https://forum.plutonium.pw) account.
