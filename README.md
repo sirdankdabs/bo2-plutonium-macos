@@ -53,10 +53,21 @@ Double-click the files in the `bo2-plutonium-macos` folder:
 | `Play Zombies (LAN).command` | Offline Zombies, no account needed. |
 | `Play Multiplayer (LAN).command` | Offline Multiplayer, no account needed. |
 | `Close BO2.command` | Stops everything running in Wine if something hangs. |
+| `Experimental - Play Campaign.command` | **Untested.** Starts the campaign (`t6sp.exe`), see below. |
 
 To set your LAN player name, create a `name.txt` file next to the `.command` files with your name on the first line.
 
 If macOS blocks a `.command` file the first time: right-click it → **Open**.
+
+## Experimental: campaign
+
+Plutonium has no Black Ops II campaign, so `Experimental - Play Campaign.command` runs the campaign executable directly from your game folder (`t6sp.exe`), with the same patched Wine and DXMT, without Plutonium.
+
+- **It has not been tested**: the author's copy of the game has no campaign files. If you try it, please open an issue saying whether it worked.
+- You need the complete campaign files in the game folder (`t6sp.exe` and the campaign maps in `zone/`). Without them, the launcher just prints a message and exits without stopping anything.
+- The launcher runs the executable as it is. If your `t6sp.exe` needs Steam to start, Steam for Windows must be installed and running in the same Wine prefix.
+- If your campaign executable has another name, start it from Terminal: `SP_EXE=name.exe "./Experimental - Play Campaign.command"`.
+- Log: `build/logs/campaign.log`.
 
 ## Troubleshooting
 

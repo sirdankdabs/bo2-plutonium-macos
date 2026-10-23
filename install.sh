@@ -101,7 +101,7 @@ fi
 
 # --- Runner and prefix --------------------------------------------------------
 step "Creating the Wine runner and prefix"
-cp "$here/scripts/run.sh" "$here/scripts/run-lan.sh" "$build/plutonium-mac/"
+cp "$here/scripts/run.sh" "$here/scripts/run-lan.sh" "$here/scripts/run-sp.sh" "$build/plutonium-mac/"
 DXMT_ARCHIVE="$build/downloads/dxmt-v0.80-builtin.tar.gz" "$build/plutonium-mac/setup.sh" "$wine_build"
 echo "$game" > "$build/game-dir.txt"
 
