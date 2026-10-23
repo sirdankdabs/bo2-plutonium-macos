@@ -1,0 +1,122 @@
+diff --git a/src/d3d11/d3d11_context_impl.cpp b/src/d3d11/d3d11_context_impl.cpp
+index d53be63..52cc55a 100644
+--- a/src/d3d11/d3d11_context_impl.cpp
++++ b/src/d3d11/d3d11_context_impl.cpp
+@@ -7,6 +7,7 @@ since it is for internal use only
+ (and I don't want to deal with several thousands line of code)
+ */
+ #include "Metal.hpp"
++#include "config/config.hpp"
+ #include "d3d11_annotation.hpp"
+ #include "d3d11_context.hpp"
+ #include "d3d11_device_child.hpp"
+@@ -1256,6 +1257,8 @@ public:
+     EmitOP([Primitive, StartVertexLocation, VertexCount](ArgumentEncodingContext& enc) {
+       enc.bumpVisibilityResultOffset();
+       enc.resolveRenderPassBarrier();
++      if (enc.currentRenderEncoder()->skip_draw)
++        return;
+       auto &cmd = enc.encodeRenderCommand<wmtcmd_render_draw>();
+       cmd.type = WMTRenderCommandDraw;
+       cmd.primitive_type = Primitive;
+@@ -1295,6 +1298,8 @@ public:
+       enc.bumpVisibilityResultOffset();
+       auto [index_buffer, index_sub_offset] = enc.currentIndexBuffer();
+       enc.resolveRenderPassBarrier();
++      if (enc.currentRenderEncoder()->skip_draw)
++        return;
+       auto &cmd = enc.encodeRenderCommand<wmtcmd_render_draw_indexed>();
+       cmd.type = WMTRenderCommandDrawIndexed;
+       cmd.primitive_type = Primitive;
+@@ -1333,6 +1338,8 @@ public:
+           StartInstanceLocation](ArgumentEncodingContext &enc) {
+       enc.bumpVisibilityResultOffset();
+       enc.resolveRenderPassBarrier();
++      if (enc.currentRenderEncoder()->skip_draw)
++        return;
+       auto &cmd = enc.encodeRenderCommand<wmtcmd_render_draw>();
+       cmd.type = WMTRenderCommandDraw;
+       cmd.primitive_type = Primitive;
+@@ -1381,6 +1388,8 @@ public:
+       enc.bumpVisibilityResultOffset();
+       auto [index_buffer, index_sub_offset] = enc.currentIndexBuffer();
+       enc.resolveRenderPassBarrier();
++      if (enc.currentRenderEncoder()->skip_draw)
++        return;
+       auto &cmd = enc.encodeRenderCommand<wmtcmd_render_draw_indexed>();
+       cmd.type = WMTRenderCommandDrawIndexed;
+       cmd.primitive_type = Primitive;
+@@ -1578,6 +1587,8 @@ public:
+         enc.bumpVisibilityResultOffset();
+         auto [index_buffer, index_sub_offset] = enc.currentIndexBuffer();
+         enc.resolveRenderPassBarrier();
++        if (enc.currentRenderEncoder()->skip_draw)
++          return;
+         auto &cmd = enc.encodeRenderCommand<wmtcmd_render_draw_indexed_indirect>();
+         cmd.type = WMTRenderCommandDrawIndexedIndirect;
+         cmd.primitive_type = Primitive;
+@@ -1615,6 +1626,8 @@ public:
+         );
+         enc.bumpVisibilityResultOffset();
+         enc.resolveRenderPassBarrier();
++        if (enc.currentRenderEncoder()->skip_draw)
++          return;
+         auto &cmd = enc.encodeRenderCommand<wmtcmd_render_draw_indirect>();
+         cmd.type = WMTRenderCommandDrawIndirect;
+         cmd.primitive_type = Primitive;
+@@ -4667,6 +4680,7 @@ public:
+     EmitST([pso = std::move(pipeline)](ArgumentEncodingContext &enc) {
+       auto render_encoder = enc.currentRenderEncoder();
+       render_encoder->use_tessellation = 1;
++      render_encoder->skip_draw = false;
+       MTL_COMPILED_TESSELLATION_MESH_PIPELINE GraphicsPipeline{};
+       pso->GetPipeline(&GraphicsPipeline); // may block
+       enc.tess_num_output_control_point_element = GraphicsPipeline.NumControlPointOutputElement;
+@@ -4715,6 +4729,7 @@ public:
+     EmitST([pso = std::move(pipeline)](ArgumentEncodingContext& enc) {
+       auto render_encoder = enc.currentRenderEncoder();
+       render_encoder->use_geometry = 1;
++      render_encoder->skip_draw = false;
+       MTL_COMPILED_GRAPHICS_PIPELINE GraphicsPipeline{};
+       pso->GetPipeline(&GraphicsPipeline); // may block
+       if (!GraphicsPipeline.PipelineState)
+@@ -4770,7 +4785,15 @@ public:
+     InitializeGraphicsPipelineDesc<IndexedDraw>(pipelineDesc);
+ 
+     device->CreateGraphicsPipeline(&pipelineDesc, &pipeline);
++    static const bool async_pipeline =
++        dxmt::Config::getInstance().getOption<bool>("d3d11.asyncPipelineCompile", false);
+     EmitST([pso = std::move(pipeline)](ArgumentEncodingContext& enc) {
++      // With asyncPipelineCompile, skip draws until the PSO is compiled instead of blocking
++      if (async_pipeline && !pso->GetIsDone()) {
++        enc.currentRenderEncoder()->skip_draw = true;
++        return;
++      }
++      enc.currentRenderEncoder()->skip_draw = false;
+       MTL_COMPILED_GRAPHICS_PIPELINE GraphicsPipeline{};
+       pso->GetPipeline(&GraphicsPipeline); // may block
+       if (!GraphicsPipeline.PipelineState)
+diff --git a/src/dxmt/dxmt_context.hpp b/src/dxmt/dxmt_context.hpp
+index 6356fae..3d42888 100644
+--- a/src/dxmt/dxmt_context.hpp
++++ b/src/dxmt/dxmt_context.hpp
+@@ -182,6 +182,7 @@ struct RenderEncoderData : EncoderData {
+   bool use_geometry = 0;
+   TileBarrierPSOKey tile_barrier_pso_key = {};
+   WMT::RenderPipelineState last_pso = {};
++  bool skip_draw = false;
+ };
+ 
+ struct ComputeEncoderData : EncoderData {
+diff --git a/src/util/com/com_guid.cpp b/src/util/com/com_guid.cpp
+index 11bf4a7..05bda6c 100644
+--- a/src/util/com/com_guid.cpp
++++ b/src/util/com/com_guid.cpp
+@@ -8,6 +8,7 @@
+  * See <https://github.com/doitsujin/dxvk/blob/master/LICENSE>
+  */
+ 
++#include <iomanip>
+ #include <mutex>
+ #include <unordered_set>
+ 
