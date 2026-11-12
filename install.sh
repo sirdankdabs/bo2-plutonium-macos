@@ -50,7 +50,7 @@ cd "$build"
 
 # --- Tools --------------------------------------------------------------------
 step "Installing build tools with Homebrew (mingw-w64, bison, flex, meson, ninja)"
-brew install mingw-w64 bison flex meson ninja
+brew install mingw-w64 bison flex meson ninja cmake
 brew_prefix=$(brew --prefix)
 export PATH="$brew_prefix/opt/bison/bin:$brew_prefix/opt/flex/bin:$brew_prefix/bin:$PATH"
 
@@ -115,7 +115,7 @@ if [ ! -f "$build/dxmt-src/build32/src/d3d11/d3d11.dll" ]; then
   git apply "$here/patches/dxmt-async-pipeline-v0.80.patch"
   rm -rf build32
   {
-    meson setup --cross-file build-win32.txt -Dwine_build_path="$wine_build" build32 --buildtype release
+    meson setup --cross-file build-win32.txt -Dwine_build_path="$wine_build" -Dnative_llvm_path="$build/dxmt-src/toolchains/llvm" build32 --buildtype release
     meson compile -C build32
   } > "$build/logs/dxmt-build.log" 2>&1 || die "DXMT build failed, see build/logs/dxmt-build.log"
   cd "$build"
@@ -130,6 +130,14 @@ if [ ! -f "$plutonium/bin/plutonium-launcher-win32.exe" ] && [ "${SKIP_PLUTONIUM
   step "Installing Plutonium: its installer window opens; wait until the launcher appears, then close it"
   "$build/plutonium-mac/run.sh" install "$game/plutonium.exe" > "$build/logs/plutonium-install.log" 2>&1 || true
 fi
+
+# --- plutonium-mac-aio engine (x87 acceleration) ------------------------------
+# The games run on plutonium-mac-aio's engine (run-bo2.sh): the same CrossOver
+# 26.3 Wine with x87sidecar, which runs BO2's x87 maths fast under Rosetta, and
+# the DXMT built above. The CrossOver runner above still builds the prefix.
+step "Installing plutonium-mac-aio's engine"
+"$here/scripts/setup-aio.sh"
+chmod +x "$here"/*.command "$here/run-bo2.sh" "$here/tools/displaymode"
 
 step "Done"
 echo "Game folder for the Plutonium launcher: Z:${game//\//\\}"

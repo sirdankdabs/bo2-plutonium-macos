@@ -1,4 +1,4 @@
 #!/bin/bash
-# Plutonium launcher: sign in and play online.
+# Plutonium launcher: sign in and play online (settings: settings.conf).
 here=$(cd -- "$(dirname -- "$0")" && pwd)
-RENDERER=dxmt WINDOWED=1 exec "$here/build/plutonium-mac/run.sh"
+exec "$here/run-bo2.sh" launcher

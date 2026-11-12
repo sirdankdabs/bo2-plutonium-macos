@@ -12,6 +12,17 @@ On macOS, Plutonium hangs at `Loading fastfile code_pre_gfx` because it uses x86
 2. **[plutonium-mac](https://github.com/LuidgiAlt/plutonium-mac)** (LuidgiAlt): scripts that create a copy of CrossOver's runtime with the patches, plus a separate Wine prefix. CrossOver.app itself is not modified.
 3. **[DXMT](https://github.com/3Shain/dxmt) v0.80** (Direct3D 11 → Metal), rebuilt with an extra patch (`patches/dxmt-async-pipeline-v0.80.patch`): while a shader is still compiling, that draw is skipped for a moment instead of freezing the frame (like DXVK-async). No more stutter when entering new areas.
 4. An offline **LAN** launcher (no account needed) and fixes to the original scripts.
+5. **[plutonium-mac-aio](https://github.com/LuidgiAlt/plutonium-mac-aio)'s engine** (LuidgiAlt, v0.2.1) to play: the same CrossOver 26.3 Wine and breakpoint patches, plus an **x87 accelerator**. BO2 does its physics and effects in x87 maths, which Rosetta translates slowly; with it, frame rates hold up when zombies and effects fill the screen (see below). The CrossOver runner from step 2 still builds the prefix.
+6. Launcher tweaks: macOS Game Mode declaration, raw mouse input, the game's size kept within the display's, DXMT frame pacing at the display's refresh rate, and a `settings.conf` file for options.
+
+### Measured (M1 Pro, 1080p, 160 Hz display with vsync, Nuketown Zombies, Metal HUD)
+
+| | 20 s | 35 s | 50 s (more zombies) |
+|---|---:|---:|---:|
+| CrossOver runner, windowed, no x87 acceleration | 160 FPS | 160 FPS | **86 FPS** |
+| aio engine with x87 acceleration (`run-bo2.sh`) | 160 FPS | 160 FPS | **160 FPS** |
+
+The GPU needs ~4-5 ms per frame either way: the game is limited by the CPU work Rosetta translates.
 
 It does not include any game, Plutonium or CrossOver files.
 
@@ -73,20 +84,26 @@ Plutonium has no Black Ops II campaign, so `Experimental - Play Campaign.command
 
 - **Crash with `sample count 8 is not supported`**: Apple GPUs support at most 4x MSAA. Lower anti-aliasing in the game (the scripts already clamp it in the config files).
 - **A long pause while a map loads**: this is normal (it happens on Windows too).
-- **Going back to stock DXMT** (without the async patch): run the launchers with `ASYNC=0`, or copy `build/plutonium-mac/runner/CrossOver/lib/dxmt/i386-windows/d3d11.dll.v080` over `d3d11.dll`.
-- **Logs**: `build/logs/` and `build/plutonium-mac/prefix/drive_c/users/crossover/AppData/Local/Plutonium/console.log`.
+- **Going back to stock DXMT** (without the async patch): set `ASYNC=0` in `settings.conf`.
+- **A crash that goes away with `X87=0`**: play with `X87=0` in `settings.conf`.
+- **Logs**: `logs/`, `build/logs/` and `build/plutonium-mac/prefix/drive_c/users/crossover/AppData/Local/Plutonium/console.log`.
 
 ## Options
 
-Environment variables accepted by the launchers (`build/plutonium-mac/run.sh` and `run-lan.sh`):
+Set them in `settings.conf` (read by every `.command` file, Play Online included) or as environment variables for `run-bo2.sh`. The full list is at the top of `run-bo2.sh`:
 
+- `MAXFPS=<n>`: frame-rate cap (default: the display's refresh rate; `0`: none).
+- `X87=0`: turn the x87 acceleration off (only if a crash goes away without it).
 - `ASYNC=0`: turns off background shader compilation.
-- `MAXFPS=60`: caps the frame rate.
-- `WINDOWED=1`: windowed mode (enabled in the `.command` files).
+- `WINDOWED=1` / `FULLSCREEN=1`: display mode. BO2 also keeps it in its hardware profile: set it in the game's options.
+- `RAW_INPUT=0`, `GAMEMODE=0`, `HUD=1` (Metal performance HUD), `SHOWFPS=1`.
 - `LAZY_EXEC=0`, `SOCKFIX=0`: turn off performance patches (for comparison).
+
+The older CrossOver-runner launchers (`build/plutonium-mac/run.sh`, `run-lan.sh`) still work for comparison.
 
 ## Credits and licenses
 
+- [LuidgiAlt/plutonium-mac-aio](https://github.com/LuidgiAlt/plutonium-mac-aio): the engine `run-bo2.sh` plays on (x87 acceleration), downloaded by `scripts/setup-aio.sh` and checked by SHA-256.
 - [LuidgiAlt/crossover-rosetta-patches](https://github.com/LuidgiAlt/crossover-rosetta-patches) (LGPL-2.1+) and [LuidgiAlt/plutonium-mac](https://github.com/LuidgiAlt/plutonium-mac) (MIT): the breakpoint fix and the base scripts. `scripts/run.sh` and `scripts/run-lan.sh` are derived from plutonium-mac's `run.sh`.
 - [3Shain/dxmt](https://github.com/3Shain/dxmt) (MIT): Direct3D 11 to Metal translation.
 - [CodeWeavers](https://www.codeweavers.com) / [Wine](https://www.winehq.org): the Wine source code in CrossOver.
