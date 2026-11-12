@@ -18,6 +18,9 @@
 #   CAPTURE=0      fullscreen without Wine capturing the display
 #   NATIVE_MODE=0  in fullscreen, keep the desktop's (possibly HiDPI-scaled) mode
 #   RAW_INPUT=0    keep the game's raw_input (default: on)
+#   RUMBLE_FIX=0   Wine's original xinput (vibration then delays controller input)
+#   AIM_ACCEL=1    keep the game's stick turn-rate acceleration (default: off)
+#   STICK_DEADZONE=<n>   stick deadzone (default 0.08; the game's is 0.2)
 #   GAMEMODE=0     don't declare Wine a game (macOS Game Mode)
 #   HUD=1          Apple's Metal performance HUD (FPS and frame times)
 #   SHOWFPS=1      the game's own FPS counter
@@ -70,6 +73,14 @@ clear_env() { unset "$1"; reg delete 'HKCU\Environment' /v "$1" /f; }
 put() { cmp -s "$1" "$2" || { cp "$1" "$2.swap" && mv -f "$2.swap" "$2"; }; }
 
 put "$engine/lib/wine/x86_64-unix/ntdll.so.fixed" "$engine/lib/wine/x86_64-unix/ntdll.so"
+# Vibration without input delay (patches/xinput): Wine's XInputSetState wrote
+# each vibration change to the controller synchronously, holding the lock the
+# input-reading thread needs, so input reached the game late on every shot.
+# The patched xinput1_3.dll sends vibration from its own thread. RUMBLE_FIX=0
+# puts Wine's original back.
+xi="$engine/lib/wine/i386-windows/xinput1_3.dll"
+[ -f "$xi.orig" ] || cp -p "$xi" "$xi.orig"
+if [ "${RUMBLE_FIX:-1}" = 1 ]; then put "$here/patches/xinput/xinput1_3.dll" "$xi"; else put "$xi.orig" "$xi"; fi
 # Game Mode: macOS gives a fullscreen game CPU/GPU priority, but only to apps
 # declared as games. Declare Wine's loader one (GAMEMODE=0 skips it).
 if [ "${GAMEMODE:-1}" = 1 ] && ! grep -aq LSApplicationCategoryType "$wine" 2>/dev/null; then
@@ -127,6 +138,7 @@ players="$plutonium/storage/t6/players"
 mkdir -p "$players"
 for m in mp zm; do [ -f "$players/hardware_$m.chp" ] || head -c 4096 /dev/zero > "$players/hardware_$m.chp"; done
 set_cvar() { sed -i '' -E "s/^seta $2 \"[^\"]*\"/seta $2 \"$3\"/" "$1"; }
+set_or_add() { if grep -q "^seta $2 " "$1"; then set_cvar "$@"; else printf 'seta %s "%s"\n' "$2" "$3" >> "$1"; fi; }
 read -r dw dh hz < <("$here/tools/displaymode" current 2>/dev/null || true)
 desktop=${dw:+${dw}x$dh}
 for cfg in "$players"/plutonium_zm.cfg "$players"/plutonium_mp.cfg; do
@@ -141,6 +153,12 @@ for cfg in "$players"/plutonium_zm.cfg "$players"/plutonium_mp.cfg; do
     fi
   fi
   if [ "${RAW_INPUT:-1}" = 1 ]; then set_cvar "$cfg" raw_input 1; set_cvar "$cfg" m_filter 0; fi
+  # Aiming feel: no turn-rate ramp-up on the sticks (it felt like input delay;
+  # AIM_ACCEL=1 keeps the game's), a smaller stick deadzone (STICK_DEADZONE,
+  # default 0.08 instead of 0.2) and no in-game mouse acceleration.
+  if [ "${AIM_ACCEL:-0}" = 0 ]; then set_or_add "$cfg" aim_accel_turnrate_enabled 0; fi
+  set_or_add "$cfg" gpad_stick_deadzone_min "${STICK_DEADZONE:-0.08}"
+  set_or_add "$cfg" cl_mouseAccel 0
   # The frame rate is capped by DXMT (MAXFPS), not by the game's com_maxfps.
   set_cvar "$cfg" com_maxfps 0
   if [ "${WINDOWED:-0}" = 1 ]; then set_cvar "$cfg" r_fullscreen 0; fi

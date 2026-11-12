@@ -1,0 +1,184 @@
+--- a/dlls/xinput1_3/main.c
++++ b/dlls/xinput1_3/main.c
+@@ -296,25 +296,26 @@
+     return TRUE;
+ }
+ 
+-static DWORD HID_set_state(struct xinput_controller *controller, XINPUT_VIBRATION *state)
++/* Fill report_buf with the output report for state; FALSE when nothing needs
++ * to be sent. Called with the controller locked. */
++static BOOL HID_prepare_state(struct xinput_controller *controller, XINPUT_VIBRATION *state, char *report_buf)
+ {
+     ULONG report_len = controller->hid.caps.OutputReportByteLength;
+     PHIDP_PREPARSED_DATA preparsed = controller->hid.preparsed;
+-    char *report_buf = controller->hid.output_report_buf;
+-    BOOL ret, update_rumble, update_buzz;
++    BOOL update_rumble, update_buzz;
+     USHORT collection;
+     NTSTATUS status;
+     BYTE report_id;
+ 
+-    if (!(controller->caps.Flags & XINPUT_CAPS_FFB_SUPPORTED)) return ERROR_SUCCESS;
++    if (!(controller->caps.Flags & XINPUT_CAPS_FFB_SUPPORTED)) return FALSE;
+ 
+     update_rumble = (controller->vibration.wLeftMotorSpeed != state->wLeftMotorSpeed);
+     controller->vibration.wLeftMotorSpeed = state->wLeftMotorSpeed;
+     update_buzz = (controller->vibration.wRightMotorSpeed != state->wRightMotorSpeed);
+     controller->vibration.wRightMotorSpeed = state->wRightMotorSpeed;
+ 
+-    if (!controller->enabled) return ERROR_SUCCESS;
+-    if (!update_rumble && !update_buzz) return ERROR_SUCCESS;
++    if (!controller->enabled) return FALSE;
++    if (!update_rumble && !update_buzz) return FALSE;
+ 
+     report_id = controller->hid.haptics_report;
+     status = HidP_InitializeReportForID(HidP_Output, report_id, preparsed, report_buf, report_len);
+@@ -330,10 +331,17 @@
+                                 state->wRightMotorSpeed, preparsed, report_buf, report_len);
+     if (status != HIDP_STATUS_SUCCESS) WARN("HidP_SetUsageValue INTENSITY returned %#lx\n", status);
+ 
+-    ret = HidD_SetOutputReport(controller->device, report_buf, report_len);
+-    if (!ret) WARN("HidD_SetOutputReport failed with error %lu\n", GetLastError());
+-    return 0;
++    return TRUE;
++}
+ 
++static DWORD HID_set_state(struct xinput_controller *controller, XINPUT_VIBRATION *state)
++{
++    ULONG report_len = controller->hid.caps.OutputReportByteLength;
++    char *report_buf = controller->hid.output_report_buf;
++
++    if (HID_prepare_state(controller, state, report_buf) &&
++        !HidD_SetOutputReport(controller->device, report_buf, report_len))
++        WARN("HidD_SetOutputReport failed with error %lu\n", GetLastError());
+     return ERROR_SUCCESS;
+ }
+ 
+@@ -823,9 +831,99 @@
+         controller_unlock(&controllers[index]);
+     }
+ }
++
++/* Vibration is sent by its own thread. HidD_SetOutputReport is a synchronous
++ * write to the device (a USB or wireless round trip, often several ms), and
++ * XInputSetState used to make it with the controller locked: the game waited
++ * for it, and so did the update thread that reads the controller's input,
++ * which then reached the game late (games set vibration on every shot).
++ * XInputSetState now records the latest vibration and returns; the rumble
++ * thread sends it outside the controller lock, on its own handle, and only the
++ * newest value if several came in during a write. */
++static CRITICAL_SECTION rumble_crit;
++static CRITICAL_SECTION_DEBUG rumble_crit_debug =
++{
++    0, 0, &rumble_crit,
++    { &rumble_crit_debug.ProcessLocksList, &rumble_crit_debug.ProcessLocksList },
++      0, 0, { (DWORD_PTR)(__FILE__ ": rumble_crit") }
++};
++static CRITICAL_SECTION rumble_crit = { &rumble_crit_debug, -1, 0, 0, 0, 0 };
++static HANDLE rumble_event;
++static struct
++{
++    BOOL pending;
++    XINPUT_VIBRATION vibration;
++} rumble[XUSER_MAX_COUNT];
+ 
++static void rumble_send(DWORD index, XINPUT_VIBRATION *vibration)
++{
++    struct xinput_controller *controller = &controllers[index];
++    HANDLE device = NULL;
++    char *report_buf;
++    ULONG report_len;
++
++    if (!controller_lock(controller)) return;
++    report_len = controller->hid.caps.OutputReportByteLength;
++    if ((report_buf = malloc(report_len)) && HID_prepare_state(controller, vibration, report_buf) &&
++        !DuplicateHandle(GetCurrentProcess(), controller->device, GetCurrentProcess(), &device, 0, FALSE,
++                         DUPLICATE_SAME_ACCESS))
++        device = NULL;
++    controller_unlock(controller);
++
++    if (device)
++    {
++        if (!HidD_SetOutputReport(device, report_buf, report_len))
++            WARN("HidD_SetOutputReport failed with error %lu\n", GetLastError());
++        CloseHandle(device);
++    }
++    free(report_buf);
++}
++
++static DWORD WINAPI rumble_thread_proc(void *param)
++{
++    XINPUT_VIBRATION vibration;
++    BOOL pending;
++    DWORD i;
++
++    SetThreadDescription(GetCurrentThread(), L"wine_xinput_rumble");
++
++    for (;;)
++    {
++        WaitForSingleObject(rumble_event, INFINITE);
++        for (i = 0; i < XUSER_MAX_COUNT; ++i)
++        {
++            EnterCriticalSection(&rumble_crit);
++            pending = rumble[i].pending;
++            vibration = rumble[i].vibration;
++            rumble[i].pending = FALSE;
++            LeaveCriticalSection(&rumble_crit);
++            if (pending) rumble_send(i, &vibration);
++        }
++    }
++    return 0;
++}
++
++static BOOL WINAPI start_rumble_thread_once(INIT_ONCE *once, void *param, void **context)
++{
++    HMODULE module;
++    HANDLE thread;
++
++    if (!(rumble_event = CreateEventW(NULL, FALSE, FALSE, NULL))) return FALSE;
++    /* The thread keeps the module loaded, as the update thread does. */
++    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (void *)rumble_thread_proc, &module))
++        return FALSE;
++    if (!(thread = CreateThread(NULL, 0, rumble_thread_proc, NULL, 0, NULL)))
++    {
++        FreeLibrary(module);
++        return FALSE;
++    }
++    CloseHandle(thread);
++    return TRUE;
++}
++
+ DWORD WINAPI DECLSPEC_HOTPATCH XInputSetState(DWORD index, XINPUT_VIBRATION *vibration)
+ {
++    static INIT_ONCE rumble_once = INIT_ONCE_STATIC_INIT;
+     DWORD ret;
+ 
+     TRACE("index %lu, vibration %p.\n", index, vibration);
+@@ -834,12 +932,23 @@
+ 
+     if (index >= XUSER_MAX_COUNT) return ERROR_BAD_ARGUMENTS;
+     if (!controller_lock(&controllers[index])) return ERROR_DEVICE_NOT_CONNECTED;
+-
+-    ret = HID_set_state(&controllers[index], vibration);
+-
+     controller_unlock(&controllers[index]);
+ 
+-    return ret;
++    if (!InitOnceExecuteOnce(&rumble_once, start_rumble_thread_once, NULL, NULL))
++    {
++        /* No thread: send it here, as before. */
++        if (!controller_lock(&controllers[index])) return ERROR_DEVICE_NOT_CONNECTED;
++        ret = HID_set_state(&controllers[index], vibration);
++        controller_unlock(&controllers[index]);
++        return ret;
++    }
++
++    EnterCriticalSection(&rumble_crit);
++    rumble[index].vibration = *vibration;
++    rumble[index].pending = TRUE;
++    LeaveCriticalSection(&rumble_crit);
++    SetEvent(rumble_event);
++    return ERROR_SUCCESS;
+ }
+ 
+ /* Some versions of SteamOverlayRenderer hot-patch XInputGetStateEx() and call

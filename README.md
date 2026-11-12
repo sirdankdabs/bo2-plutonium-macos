@@ -13,7 +13,8 @@ On macOS, Plutonium hangs at `Loading fastfile code_pre_gfx` because it uses x86
 3. **[DXMT](https://github.com/3Shain/dxmt) v0.80** (Direct3D 11 → Metal), rebuilt with an extra patch (`patches/dxmt-async-pipeline-v0.80.patch`): while a shader is still compiling, that draw is skipped for a moment instead of freezing the frame (like DXVK-async). No more stutter when entering new areas.
 4. An offline **LAN** launcher (no account needed) and fixes to the original scripts.
 5. **[plutonium-mac-aio](https://github.com/LuidgiAlt/plutonium-mac-aio)'s engine** (LuidgiAlt, v0.2.1) to play: the same CrossOver 26.3 Wine and breakpoint patches, plus an **x87 accelerator**. BO2 does its physics and effects in x87 maths, which Rosetta translates slowly; with it, frame rates hold up when zombies and effects fill the screen (see below). The CrossOver runner from step 2 still builds the prefix.
-6. Launcher tweaks: macOS Game Mode declaration, raw mouse input, the game's size kept within the display's, DXMT frame pacing at the display's refresh rate, and a `settings.conf` file for options.
+6. **Controller vibration without input delay** (`patches/xinput`): Wine's `XInputSetState` wrote every vibration change to the controller synchronously while holding the lock its input-reading thread needs, so stick and button input reached the game late whenever it rumbled (every shot). The patched `xinput1_3.dll` (built from CrossOver 26.3's Wine source with `0001-xinput-async-vibration.patch`) sends vibration from its own thread, outside that lock, and only the newest value when several arrive during a write. `RUMBLE_FIX=0` puts Wine's original back.
+7. Launcher tweaks: macOS Game Mode declaration, raw mouse input, no stick turn-rate acceleration and a smaller stick deadzone, no in-game mouse acceleration, the game's size kept within the display's, DXMT frame pacing at the display's refresh rate, and a `settings.conf` file for options.
 
 ### Measured (M1 Pro, 1080p, 160 Hz display with vsync, Nuketown Zombies, Metal HUD)
 
@@ -96,6 +97,8 @@ Set them in `settings.conf` (read by every `.command` file, Play Online included
 - `X87=0`: turn the x87 acceleration off (only if a crash goes away without it).
 - `ASYNC=0`: turns off background shader compilation.
 - `WINDOWED=1` / `FULLSCREEN=1`: display mode. BO2 also keeps it in its hardware profile: set it in the game's options.
+- `RUMBLE_FIX=0`: Wine's original xinput (vibration then delays controller input).
+- `AIM_ACCEL=1`: keep the game's stick turn-rate acceleration (off by default: it felt like input lag). `STICK_DEADZONE=<n>`: stick deadzone (default `0.08`; the game's is `0.2`).
 - `RAW_INPUT=0`, `GAMEMODE=0`, `HUD=1` (Metal performance HUD), `SHOWFPS=1`.
 - `LAZY_EXEC=0`, `SOCKFIX=0`: turn off performance patches (for comparison).
 
