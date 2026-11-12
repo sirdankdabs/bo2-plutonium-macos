@@ -64,6 +64,7 @@ Double-click the files in the `bo2-plutonium-macos` folder:
 | `Play Online (Plutonium Launcher).command` | Opens the Plutonium launcher. Sign in, pick Black Ops II, click **Set up** and select the game folder (Wine shows it as `Z:\path\to\Call of Duty Black Ops II`; the installer prints the exact path), then click **Play**. |
 | `Play Zombies (LAN).command` | Offline Zombies, no account needed. |
 | `Play Multiplayer (LAN).command` | Offline Multiplayer, no account needed. |
+| `Play Zombies Declassified (LAN).command` | Offline Zombies with the Zombies Declassified mod (see below). |
 | `Close BO2.command` | Stops everything running in Wine if something hangs. |
 | `Experimental - Play Campaign.command` | **Untested.** Starts the campaign (`t6sp.exe`), see below. |
 
@@ -80,6 +81,19 @@ Plutonium has no Black Ops II campaign, so `Experimental - Play Campaign.command
 - The launcher runs the executable as it is. If your `t6sp.exe` needs Steam to start, Steam for Windows must be installed and running in the same Wine prefix.
 - If your campaign executable has another name, start it from Terminal: `SP_EXE=name.exe "./Experimental - Play Campaign.command"`.
 - Log: `build/logs/campaign.log`.
+
+## Zombies Declassified (BO1's zombies maps in BO2)
+
+[Zombies Declassified](https://github.com/Logo-2K/zombies-declassified) (Logo-2K) is a Plutonium mod that ports Black Ops II's unreleased "DLC 5": Nacht der Untoten, Verrückt, Shi No Numa, Der Riese, Kino der Toten, "Five", Ascension, Shangri-La and Moon. It needs the full game with all DLC.
+
+```bash
+scripts/zombies-declassified.sh           # install or update (~9 GB)
+scripts/zombies-declassified.sh verify    # check the installed files
+```
+
+The script runs the mod's own installer (`zdinstall.py`, from its latest release) with this setup's folders: every file is checked against the release's SHA-256, and anything replaced is backed up under `~/.zombies-declassified/backups`. This repository contains no mod files.
+
+To play: `Play Zombies Declassified (LAN).command` (offline; pick the map in the mod's menu), or online from the Plutonium launcher, then **Mods → dlc5** in the game. Tested on an M1 Pro: Kino der Toten loads and runs at ~160 FPS.
 
 ## Troubleshooting
 
@@ -106,6 +120,7 @@ The older CrossOver-runner launchers (`build/plutonium-mac/run.sh`, `run-lan.sh`
 
 ## Credits and licenses
 
+- [Logo-2K/zombies-declassified](https://github.com/Logo-2K/zombies-declassified) (GPL-3.0): the mod `scripts/zombies-declassified.sh` installs.
 - [LuidgiAlt/plutonium-mac-aio](https://github.com/LuidgiAlt/plutonium-mac-aio): the engine `run-bo2.sh` plays on (x87 acceleration), downloaded by `scripts/setup-aio.sh` and checked by SHA-256.
 - [LuidgiAlt/crossover-rosetta-patches](https://github.com/LuidgiAlt/crossover-rosetta-patches) (LGPL-2.1+) and [LuidgiAlt/plutonium-mac](https://github.com/LuidgiAlt/plutonium-mac) (MIT): the breakpoint fix and the base scripts. `scripts/run.sh` and `scripts/run-lan.sh` are derived from plutonium-mac's `run.sh`.
 - [3Shain/dxmt](https://github.com/3Shain/dxmt) (MIT): Direct3D 11 to Metal translation.
