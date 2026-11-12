@@ -12,7 +12,7 @@ On macOS, Plutonium hangs at `Loading fastfile code_pre_gfx` because it uses x86
 2. **[plutonium-mac](https://github.com/LuidgiAlt/plutonium-mac)** (LuidgiAlt): scripts that create a copy of CrossOver's runtime with the patches, plus a separate Wine prefix. CrossOver.app itself is not modified.
 3. **[DXMT](https://github.com/3Shain/dxmt) v0.80** (Direct3D 11 → Metal), rebuilt with an extra patch (`patches/dxmt-async-pipeline-v0.80.patch`): while a shader is still compiling, that draw is skipped for a moment instead of freezing the frame (like DXVK-async). No more stutter when entering new areas.
 4. An offline **LAN** launcher (no account needed) and fixes to the original scripts.
-5. **[plutonium-mac-aio](https://github.com/LuidgiAlt/plutonium-mac-aio)'s engine** (LuidgiAlt, v0.2.1) to play: the same CrossOver 26.3 Wine and breakpoint patches, plus an **x87 accelerator**. BO2 does its physics and effects in x87 maths, which Rosetta translates slowly; with it, frame rates hold up when zombies and effects fill the screen (see below). The CrossOver runner from step 2 still builds the prefix.
+5. **[plutonium-mac-aio](https://github.com/LuidgiAlt/plutonium-mac-aio)'s engine** (LuidgiAlt, v0.2.1) to play: the same CrossOver 26.3 Wine and breakpoint patches, plus an **x87 accelerator** ([x87sidecar](https://github.com/athei/x87sidecar) (athei), which grew out of [rosettax87](https://github.com/Lifeisawful/rosettax87) and [rosettax87_jit](https://github.com/Lifeisawful/rosettax87_jit) (Lifeisawful)). BO2 does its physics and effects in x87 maths, which Rosetta translates slowly; with it, frame rates hold up when zombies and effects fill the screen (see below). The CrossOver runner from step 2 still builds the prefix.
 6. **Controller vibration without input delay** (`patches/xinput`): Wine's `XInputSetState` wrote every vibration change to the controller synchronously while holding the lock its input-reading thread needs, so stick and button input reached the game late whenever it rumbled (every shot). The patched `xinput1_3.dll` (built from CrossOver 26.3's Wine source with `0001-xinput-async-vibration.patch`) sends vibration from its own thread, outside that lock, and only the newest value when several arrive during a write. `RUMBLE_FIX=0` puts Wine's original back.
 7. Launcher tweaks: macOS Game Mode declaration, raw mouse input, no stick turn-rate acceleration and a smaller stick deadzone, no in-game mouse acceleration, the game's size kept within the display's, DXMT frame pacing at the display's refresh rate, and a `settings.conf` file for options.
 
@@ -109,6 +109,7 @@ Set them in `settings.conf` (read by every `.command` file, Play Online included
 
 - `MAXFPS=<n>`: frame-rate cap (default: the display's refresh rate; `0`: none).
 - `X87=0`: turn the x87 acceleration off (only if a crash goes away without it).
+- `X87_SIDECAR=athei|aio`: which x87 accelerator: athei's x87sidecar release, or the aio engine's reduced build of it.
 - `ASYNC=0`: turns off background shader compilation.
 - `WINDOWED=1` / `FULLSCREEN=1`: display mode. BO2 also keeps it in its hardware profile: set it in the game's options.
 - `RUMBLE_FIX=0`: Wine's original xinput (vibration then delays controller input).
@@ -120,6 +121,7 @@ The older CrossOver-runner launchers (`build/plutonium-mac/run.sh`, `run-lan.sh`
 
 ## Credits and licenses
 
+- **x87 acceleration:** [x87sidecar](https://github.com/athei/x87sidecar) (athei). It grew out of [rosettax87](https://github.com/Lifeisawful/rosettax87) and [rosettax87_jit](https://github.com/Lifeisawful/rosettax87_jit) (Lifeisawful) (MIT): Lifeisawful wrote the original Rosetta x87 hook, athei turned it into x87sidecar. `scripts/setup-aio.sh` downloads athei's release (checked by SHA-256); `X87_SIDECAR=athei` plays with it, `X87_SIDECAR=aio` with the aio engine's reduced build.
 - [Logo-2K/zombies-declassified](https://github.com/Logo-2K/zombies-declassified) (GPL-3.0): the mod `scripts/zombies-declassified.sh` installs.
 - [LuidgiAlt/plutonium-mac-aio](https://github.com/LuidgiAlt/plutonium-mac-aio): the engine `run-bo2.sh` plays on (x87 acceleration), downloaded by `scripts/setup-aio.sh` and checked by SHA-256.
 - [LuidgiAlt/crossover-rosetta-patches](https://github.com/LuidgiAlt/crossover-rosetta-patches) (LGPL-2.1+) and [LuidgiAlt/plutonium-mac](https://github.com/LuidgiAlt/plutonium-mac) (MIT): the breakpoint fix and the base scripts. `scripts/run.sh` and `scripts/run-lan.sh` are derived from plutonium-mac's `run.sh`.

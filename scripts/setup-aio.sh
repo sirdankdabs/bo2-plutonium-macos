@@ -48,5 +48,18 @@ for a in i386-windows x86_64-windows; do
 done
 cp "$dxmt/x86_64-unix/winemetal.so" "$r/engine/lib/wine/x86_64-unix/winemetal.so"
 codesign -fs - "$r/engine/lib/wine/x86_64-unix/winemetal.so"
+# athei's x87sidecar (github.com/athei/x87sidecar), from its own release: the
+# upstream of the accelerator inside the aio engine (which is a reduced build
+# of it). Same cooperative handshake, so it drops into this Wine as is;
+# run-bo2.sh picks one with X87_SIDECAR=athei|aio.
+x87_url=https://github.com/athei/x87sidecar/releases/download/v1.9.1/x87sidecar.tar.xz
+x87_sha=e18d1c2443f1440ae5a8e137dd0c85ec33e53506b67604675826094122106615
+fetch "$dl/x87sidecar.tar.xz" "$x87_url" "$x87_sha"
+rm -rf "$here/build/x87sidecar" && mkdir -p "$here/build/x87sidecar"
+tar -xJf "$dl/x87sidecar.tar.xz" -C "$here/build/x87sidecar"
+xattr -d com.apple.quarantine "$here/build/x87sidecar/x87sidecar" 2>/dev/null || true
+cp -p "$r/engine/bin/x87sidecar" "$r/engine/bin/x87sidecar.aio"
+"$here/build/x87sidecar/x87sidecar" --probe > /dev/null 2>&1 ||
+  echo "note: athei's x87sidecar does not support this Rosetta; X87_SIDECAR=athei would run without acceleration" >&2
 cat "$r/engine/version"
 echo "aio engine installed in $r"

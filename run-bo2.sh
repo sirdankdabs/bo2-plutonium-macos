@@ -13,6 +13,7 @@
 #   MAXFPS=<n>     cap the frame rate with DXMT's Metal frame pacing (0: no cap);
 #                  a whole fraction of the refresh rate paces best
 #   X87=0          turn the x87 acceleration off
+#   X87_SIDECAR=athei|aio  which x87 accelerator: athei's x87sidecar or the aio engine's build
 #   ASYNC=0        stock DXMT: wait for pipelines instead of skipping the draw
 #   WINDOWED=1 / FULLSCREEN=1   display mode
 #   CAPTURE=0      fullscreen without Wine capturing the display
@@ -112,6 +113,17 @@ set_env WINE_ROSETTA_CALL_WORKAROUND 1
 set_env WINE_ROSETTA_LAZY_EXEC "${LAZY_EXEC:-1}"
 set_env WINE_SOCK_FASTPATH "${SOCKFIX:-1}"
 if [ "${X87:-1}" = 1 ]; then set_env WINE_X87_SIDECAR plutonium-bootstrapper-win32.exe; else clear_env WINE_X87_SIDECAR; fi
+# Which x87 accelerator Wine starts the game under (bin/x87sidecar):
+# X87_SIDECAR=athei  athei's x87sidecar 1.9.1 (build/x87sidecar, its release),
+#                    which grew from Lifeisawful's rosettax87;
+# X87_SIDECAR=aio    the aio engine's reduced, hardened build of it.
+side="$engine/bin/x87sidecar"
+[ -f "$side.aio" ] || cp -p "$side" "$side.aio"
+if [ "${X87_SIDECAR:-aio}" = athei ] && [ -x "$here/build/x87sidecar/x87sidecar" ]; then
+  put "$here/build/x87sidecar/x87sidecar" "$side"
+else
+  put "$side.aio" "$side"
+fi
 if [ "${HUD:-0}" = 1 ]; then set_env MTL_HUD_ENABLED 1; else clear_env MTL_HUD_ENABLED; fi
 clear_env CX_GRAPHICS_BACKEND
 "$WINESERVER" -w 2>/dev/null || true
